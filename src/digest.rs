@@ -27,7 +27,7 @@ impl DigestError {
 
 impl fmt::Display for DigestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error calculating file digest: {}", self.message)
+        write!(f, "{}", self.message)
     }
 }
 
@@ -37,12 +37,7 @@ impl Error for DigestError {
     }
 }
 
-pub fn calculate_digest(filename: String, _digest: Digest) -> Result<u32> {
-
-    let mut file = match File::open(filename) {
-        Ok(f) => f,
-        Err(_) => { return Err(DigestError::new("could not open file")); }
-    };
+pub fn calculate_digest(mut file: File, _digest: Digest) -> Result<u32> {
 
     let filesize = match file.metadata() {
         Ok(metadata) => metadata.len() as usize,
@@ -62,12 +57,7 @@ pub fn calculate_digest(filename: String, _digest: Digest) -> Result<u32> {
     Ok(hasher.finalize())
 }
 
-pub fn calculate_digest_mmap(filename: String, _digest: Digest) -> Result<u32> {
-
-    let file = match File::open(filename) {
-        Ok(f) => f,
-        Err(_) => { return Err(DigestError::new("could not open file")); }
-    };
+pub fn calculate_digest_mmap(file: File, _digest: Digest) -> Result<u32> {
 
     let buffer = unsafe {
         match MmapOptions::new().map(&file) {

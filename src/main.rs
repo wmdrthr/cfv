@@ -2,6 +2,8 @@
 extern crate clap;
 extern crate chrono;
 
+use std::fs::{File};
+
 use clap::{Arg, App};
 use chrono::Local;
 use data_encoding::HEXUPPER;
@@ -35,9 +37,19 @@ fn main() {
 
 
     for el in iterator.unwrap() {
+
         let filename = el.to_string();
-        print!("{} ", filename);
-        let checksum = digest::calculate_digest_mmap(filename, digest::Digest::CRC32);
-        println!("{}", HEXUPPER.encode(&checksum.unwrap().to_be_bytes()));
+        let file = match File::open(filename.clone()) {
+            Ok(f) => f,
+            Err(_) => {
+                eprintln!("{}: could not open file", filename);
+                continue;
+            }
+        };
+
+        match digest::calculate_digest_mmap(file, digest::Digest::CRC32) {
+            Ok(checksum) => { println!("{} {}", filename, HEXUPPER.encode(&checksum.to_be_bytes())); }
+            Err(e) => { eprintln!("{}: {}", filename, e); }
+        };
     }
 }
