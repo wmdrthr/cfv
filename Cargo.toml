@@ -1,0 +1,8 @@
+[package]
+name = "cfv"
+version = "0.1.0"
+authors = ["Shantanu Joshi <weemadarthur@yggdrasil.in>"]
+description = "Verify file consistency with .sfv files"
+edition = "2018"
+
+[dependencies]
