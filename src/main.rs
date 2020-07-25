@@ -1,11 +1,16 @@
 #[macro_use]
 extern crate clap;
 extern crate chrono;
+extern crate walkdir;
 
-use std::fs::{File};
+use std::fs::{self, File};
+use std::env;
+use std::process::exit;
+use std::path::PathBuf;
 
 use clap::{Arg, App};
 use chrono::Local;
+use walkdir::WalkDir;
 use data_encoding::HEXUPPER;
 
 pub mod digest;
@@ -20,36 +25,80 @@ fn print_header() {
              local_time.format("%Y-%m-%d at %H:%M:%S"));
 }
 
+fn process(path: PathBuf, tld: Option<&PathBuf>) {
+
+    let metadata = match fs::metadata(&path) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("{}: {} ", path.display(), e);
+            return;
+        }
+    };
+
+    if !metadata.is_file() {
+        return;
+    }
+
+    let filename = if path.is_relative() {
+        path.display()
+    } else {
+        match tld {
+            Some(cwd) => path.strip_prefix(cwd).unwrap().display(),
+            None => path.display()
+        }
+    };
+
+    let file = match File::open(path.clone()) {
+        Ok(f) => f,
+        Err(_) => {
+            eprintln!("{}: could not open file", filename);
+            return;
+        }
+    };
+
+    match digest::calculate_digest_mmap(file, digest::Digest::CRC32) {
+        Ok(checksum) => { println!("{} {}", filename, HEXUPPER.encode(&checksum.to_be_bytes())); }
+        Err(e) => { eprintln!("{}: {}", filename, e); }
+    };
+}
+
 fn main() {
 
-    let matches = App::new(crate_name!())
+    let app = App::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
         .arg(Arg::with_name("files")
-             .multiple(true)
-             .required(true))
+             .multiple(true))
         .get_matches();
-
-    let iterator = matches.values_of("files");
 
     print_header();
 
+    if app.occurrences_of("files") == 0 {
 
-    for el in iterator.unwrap() {
-
-        let filename = el.to_string();
-        let file = match File::open(filename.clone()) {
-            Ok(f) => f,
+        let current_dir = match env::current_dir() {
+            Ok(p) => p,
             Err(_) => {
-                eprintln!("{}: could not open file", filename);
-                continue;
+                eprintln!("Could not determine current directory");
+                exit(3);
             }
         };
 
-        match digest::calculate_digest_mmap(file, digest::Digest::CRC32) {
-            Ok(checksum) => { println!("{} {}", filename, HEXUPPER.encode(&checksum.to_be_bytes())); }
-            Err(e) => { eprintln!("{}: {}", filename, e); }
-        };
+        for entry in WalkDir::new(&current_dir).min_depth(1) {
+            process(entry.unwrap().path().to_path_buf(), Some(&current_dir));
+        }
+
+    } else {
+
+        let iterator = app.values_of("files");
+        for el in iterator.unwrap() {
+
+            let path = PathBuf::from(el);
+            for entry in WalkDir::new(&path)
+                .min_depth(1)
+                .contents_first(true) {
+                    process(entry.unwrap().path().to_path_buf(), None);
+            }
+        }
     }
 }
